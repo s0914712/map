@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MAP</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <style>
+        #map {
+            height: 700px;
+            width: 100%;
+        }
+        .map-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .control-button {
+            margin: 5px;
+            padding: 8px 12px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .control-button.active {
+            background: #ea4335;
+        }
+        .info-window {
+            padding: 10px;
+            max-width: 300px;
+        }
+        .circle-legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+        #measurement-info {
+            position: absolute;
+            bottom: 30px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+        .measuring {
+            cursor: crosshair !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="map-controls">
+        <button id="bases-button" class="control-button active">Military base</button>
+        <button id="missile-button" class="control-button">Ballistic missile Range</button>
+        <button id="line-tool" class="control-button">Draw Line</button>
+        <button id="circle-tool" class="control-button">Draw Circle</button>
+        <button id="measure-tool" class="control-button">Measure</button>
+        <button id="clear-tool" class="control-button">Clear All</button>
+    </div>
+    <div class="circle-legend" id="range-legend">
+        <div><span style="color: red;">●</span> 900 km</div>
+        <div><span style="color: orange;">●</span> 2000 km</div>
+        <div><span style="color: green;">●</span> 4000 km</div>
+        <div><span style="color: yellow;">●</span> 5500 km</div>
+    </div>
+    <div id="measurement-info" style="display: none;">
+        <div>Total Distance: <span id="total-distance">0</span> km</div>
+        <div>Current Segment: <span id="segment-distance">0</span> km</div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        let map;
+        let activeInfoWindow = null;
+        let baseMarkers = [];
+        let missileRanges = [];
+        let drawingManager;
+        let measureTool;
+        let activeTool = null;
+        let measurePath = [];
+        let measureLine = null;
+        let tempLine = null;
+        let measureMarkers = [];
+        let activeShapes = [];
+        let mouseMoveListener = null;
+        
+        const locations = [
+            {
+                position: { lat: 24.26, lng: 118.12 },
+                title: 'Xiamen',
+                content: 'navy base'
+            }, 
+            {
+                position: { lat: 26.50, lng: 127.70 },
+                title: 'OKINAWA',
+                content: 'base'
+            }, 
+            {
+                position: { lat: 21.39, lng: 110.19 },
+                title: 'ZHANJIANG',
+                content: 'navy base'
+            },  
+            {
+                position: { lat: 28.51, lng: 120.55 },
+                title: 'nimbo base',
+                content: 'navy base'
+            },  
+	    {
+                position: { lat: 23.425, lng: 116.760278 },
+                title: 'Shantou Waisha',
+                content: 'Aircraft: J-10C、J-7E、J-7EG、Y8ASW'
+            },
+            {
+                position: { lat: 23.461667, lng: 120.392778 },
+                title: 'Chiayi Air Base',
+                content: 'Military Air Base'
+            },
+            {
+                position: { lat: 22.756389, lng: 118.307778 },
+                title: 'Aircraft Collision Location',
+                content: 'Site of reported aircraft collision'
+            },
+            {
+                position: { lat: 31.320628, lng: 121.412965 },
+                title: 'Shanghai Dachang',
+                content: 'Naval Aviation Force: KJ-500, J10, J11'
+            },
+            {
+                position: { lat: 18.226163, lng: 109.548871 },
+                title: 'Yulin Harbour',
+                content: 'Navy Base'
+            }
+        ];
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 30.0, lng: 115.0 },
+                zoom: 5
+            });
+
+            // 初始化绘图管理器
+            drawingManager = new google.maps.drawing.DrawingManager({
+                drawingMode: null,
+                drawingControl: false,
+                polylineOptions: {
+                    strokeColor: '#FF0000',
+                    strokeWeight: 2
+                },
+                circleOptions: {
+                    fillColor: '#FF0000',
+                    fillOpacity: 0.2,
+                    strokeWeight: 2,
+                    strokeColor: '#FF0000',
+                    editable: true
+                }
+            });
+
+            drawingManager.setMap(map);
+
+            // 创建基地标记
+            locations.forEach(location => {
+                const marker = new google.maps.Marker({
+                    position: location.position,
+                    map: map,
+                    title: location.title
+                });
+
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div class="info-window">
+                            <h3>${location.title}</h3>
+                            <p>${location.content}</p>
+                        </div>
+                    `
+                });
+
+                marker.addListener('click', () => {
+                    if (activeInfoWindow) {
+                        activeInfoWindow.close();
+                    }
+                    infoWindow.open(map, marker);
+                    activeInfoWindow = infoWindow;
+                });
+
+                baseMarkers.push(marker);
+            });
+
+            // 创建导弹射程圆圈
+            const ranges = [
+                { radius: 900000, color: '#FF0000' },
+                { radius: 2000000, color: '#FFA500' },
+                { radius: 4000000, color: '#00FF00' },
+                { radius: 5500000, color: '#FFFF00' }
+            ];
+
+            const centerPoint = { lat: 39.9042, lng: 116.4074 };
+            ranges.forEach(range => {
+                const circle = new google.maps.Circle({
+                    strokeColor: range.color,
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: range.color,
+                    fillOpacity: 0.1,
+                    map: null,
+                    center: centerPoint,
+                    radius: range.radius
+                });
+                missileRanges.push(circle);
+            });
+
+            // 绘图完成事件处理
+            google.maps.event.addListener(drawingManager, 'overlaycomplete', function(event) {
+                activeShapes.push(event.overlay);
+            });
+
+            // 按钮事件处理
+            $('#bases-button').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                $('#missile-button').removeClass('active');
+                baseMarkers.forEach(marker => marker.setMap(map));
+                missileRanges.forEach(circle => circle.setMap(null));
+                $('#range-legend').hide();
+            });
+
+            $('#missile-button').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                $('#bases-button').removeClass('active');
+                baseMarkers.forEach(marker => marker.setMap(null));
+                missileRanges.forEach(circle => circle.setMap(map));
+                $('#range-legend').show();
+            });
+
+            $('#line-tool').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                drawingManager.setDrawingMode(google.maps.drawing.OverlayType.POLYLINE);
+                activeTool = 'line';
+            });
+
+            $('#circle-tool').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                drawingManager.setDrawingMode(google.maps.drawing.OverlayType.CIRCLE);
+                activeTool = 'circle';
+            });
+
+            $('#measure-tool').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                activeTool = 'measure';
+                $('#measurement-info').show();
+                $('#map').addClass('measuring');
+                map.addListener('click', measureToolClickHandler);
+                mouseMoveListener = map.addListener('mousemove', updateTempLine);
+            });
+
+            $('#clear-tool').click(function() {
+                clearAll();
+            });
+        }
+
+        function resetTools() {
+            $('.control-button').removeClass('active');
+            drawingManager.setDrawingMode(null);
+            $('#map').removeClass('measuring');
+            
+            if (measureLine) {
+                measureLine.setMap(null);
+            }
+            if (tempLine) {
+                tempLine.setMap(null);
+            }
+            measureMarkers.forEach(marker => marker.setMap(null));
+            measureMarkers = [];
+            
+            measurePath = [];
+            $('#measurement-info').hide();
+            
+            if (mouseMoveListener) {
+                google.maps.event.removeListener(mouseMoveListener);
+                mouseMoveListener = null;
+            }
+            google.maps.event.clearListeners(map, 'click');
+            activeTool = null;
+        }
+
+        function clearAll() {
+            activeShapes.forEach(shape => shape.setMap(null));
+            activeShapes = [];
+            
+            if (measureLine) {
+                measureLine.setMap(null);
+            }
+            if (tempLine) {
+                tempLine.setMap(null);
+            }
+            
+            measureMarkers.forEach(marker => marker.setMap(null));
+            measureMarkers = [];
+            
+            measurePath = [];
+            $('#measurement-info').hide();
+            $('#total-distance').text('0');
+            $('#segment-distance').text('0');
+        }
+
+        function measureToolClickHandler(event) {
+            if (activeTool !== 'measure') return;
+
+            const latLng = event.latLng;
+            measurePath.push(latLng);
+
+            const marker = new google.maps.Marker({
+                position: latLng,
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 5,
+                    fillColor: '#4285f4',
+                    fillOpacity: 1,
+                    strokeWeight: 2,
+                    strokeColor: '#ffffff'
+                }
+            });
+            measureMarkers.push(marker);
+
+            if (measureLine) {
+                measureLine.setMap(null);
+            }
+
+            if (measurePath.length > 1) {
+                measureLine = new google.maps.Polyline({
+                    path: measurePath,
+                    strokeColor: '#4285f4',
+                    strokeWeight: 3,
+                    map: map
+                });
+
+                updateDistances();
+            }
+        }
+
+        function updateTempLine(event) {
+            if (activeTool !== 'measure' || measurePath.length === 0) return;
+
+            const tempPath = [...measurePath, event.latLng];
+            
+            if (tempLine) {
+                tempLine.setMap(null);
+            }
+
+            tempLine = new google.maps.Polyline({
+                path: tempPath,
+                strokeColor: '#4285f4',
+                strokeWeight: 2,
+                strokeOpacity: 0.5,
+                map: map
+            });
+
+            if (measurePath.length > 0) {
+                const segmentDistance = google.maps.geometry.spherical.computeDistanceBetween(
+                    measurePath[measurePath.length - 1],
+                    event.latLng
+                );
+                $('#segment-distance').text((segmentDistance / 1000).toFixed(2));
+            }
+        }
+
+        function updateDistances() {
+            let totalDistance = 0;
+            for (let i = 1; i < measurePath.length; i++) {
+                totalDistance += google.maps.geometry.spherical.computeDistanceBetween(
+                    measurePath[i-1], measurePath[i]
+                );
+            }
+            $('#total-distance').text((totalDistance / 1000).toFixed(2));
+        }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=%NEXT_PUBLIC_GOOGLE_MAPS_API_KEY%&libraries=drawing,geometry&callback=initMap" async defer></script><script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCxLuiy4aJnVTkozy8xvFiV65m0OtDAgko&libraries=drawing,geometry&callback=initMap" async defer></script>
+</body>
+</html>
