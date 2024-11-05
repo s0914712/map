@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MAP</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <style>
+        #map {
+            height: 700px;
+            width: 100%;
+        }
+        .map-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .control-button {
+            margin: 5px;
+            padding: 8px 12px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .control-button.active {
+            background: #ea4335;
+        }
+        .info-window {
+            padding: 10px;
+            max-width: 300px;
+        }
+        .circle-legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+        #measurement-info {
+            position: absolute;
+            bottom: 30px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+        .measuring {
+            cursor: crosshair !important;
+        }
+        .color-dots {
+            margin-top: 10px;
+        }
+        .dot {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        .dot.red { background-color: red; }
+        .dot.yellow { background-color: yellow; }
+        .dot.green { background-color: green; }
+        
+        .map-label {
+            background-color: white;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .symbol-buttons {
+            margin-top: 10px;
+        }
+
+        .symbol-btn {
+            font-size: 20px;
+            padding: 5px 10px;
+            margin: 0 5px;
+            cursor: pointer;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .symbol-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .symbol-btn.active {
+            background: #4285f4;
+            color: white;
+        }
+
+        .search-container {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            z-index: 1000;
+            width: 300px;
+        }
+
+        #search-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+
+        #search-results {
+            background: white;
+            margin-top: 5px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .search-result-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .search-result-item:hover {
+            background: #f5f5f5;
+        }
+
+        .map-with-search {
+            height: 700px;
+            width: calc(100% - 320px);
+            margin-left: 320px;
+        }
+
+        .canvas-controls {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #ccc;
+        }
+
+        .canvas-btn {
+            padding: 8px 12px;
+            margin: 0 5px;
+            background: white;
+            border: 1px solid #4285f4;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #4285f4;
+        }
+
+        .canvas-btn.active {
+            background: #4285f4;
+            color: white;
+        }
+
+        #export-button {
+            background-color: #4CAF50;
+            color: white;
+            margin-top: 10px;
+            border: none;
+        }
+
+        #export-button:hover {
+            background-color: #45a049;
+        }
+
+        /* 左側欄樣式 */
+        .left-sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 250px;
+            background: white;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        /* 地圖控制按鈕樣式 */
+        .map-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-button {
+            width: 100%;
+            padding: 10px;
+            margin: 0;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .control-button:hover {
+            background: #357abd;
+        }
+
+        .control-button.active {
+            background: #ea4335;
+        }
+
+        /* 符號按鈕樣式 */
+        .symbol-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+        }
+
+        .symbol-btn {
+            flex: 1;
+            margin: 0 5px;
+            padding: 8px;
+            font-size: 20px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .symbol-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .symbol-btn.active {
+            background: #4285f4;
+            color: white;
+        }
+
+        /* 畫布控制按鈕樣式 */
+        .canvas-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin: 10px 0;
+        }
+
+        .canvas-btn {
+            padding: 8px;
+            background: white;
+            border: 1px solid #4285f4;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #4285f4;
+        }
+
+        .canvas-btn.active {
+            background: #4285f4;
+            color: white;
+        }
+
+        /* 導出按鈕樣式 */
+        #export-button {
+            background-color: #4CAF50;
+            margin-top: 10px;
+        }
+
+        #export-button:hover {
+            background-color: #45a049;
+        }
+
+        /* 調整地圖容器樣式 */
+        #map {
+            position: fixed;
+            left: 250px;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            height: 100vh !important;
+            width: auto !important;
+        }
+
+        /* 測量信息樣式 */
+        #measurement-info {
+            position: absolute;
+            bottom: 30px;
+            left: 270px; /* 調整位置以適應左側欄 */
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="left-sidebar">
+        <div class="map-controls">
+            <button id="bases-button" class="control-button active">Military Bases</button>
+            <button id="line-tool" class="control-button">Draw Line</button>
+            <button id="circle-tool" class="control-button">Draw Circle</button>
+            <button id="measure-tool" class="control-button">Measure</button>
+            <button id="clear-tool" class="control-button">Clear All</button>
+            <button id="text-tool" class="control-button">Add Text</button>
+            
+            <div class="symbol-buttons">
+                <button class="symbol-btn" data-symbol="plane" title="Aircraft">✈️</button>
+                <button class="symbol-btn" data-symbol="ship" title="Ship">🚢</button>
+                <button class="symbol-btn" data-symbol="person" title="Personnel">👤</button>
+            </div>
+            
+            <div class="canvas-controls">
+                <button id="canvas1" class="canvas-btn active" data-canvas="1">Plan A</button>
+                <button id="canvas2" class="canvas-btn" data-canvas="2">Plan B</button>
+                <button id="canvas3" class="canvas-btn" data-canvas="3">Plan C</button>
+            </div>
+            
+            <button id="export-button" class="control-button">Export to PNG</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        let map;
+        let activeInfoWindow = null;
+        let baseMarkers = [];
+        let missileRanges = [];
+        let drawingManager;
+        let measureTool;
+        let activeTool = null;
+        let measurePath = [];
+        let measureLine = null;
+        let tempLine = null;
+        let measureMarkers = [];
+        let activeShapes = [];
+        let mouseMoveListener = null;
+        let activeDotColor = null;
+        let activeSymbol = null;
+        let currentCanvas = 1;
+        let canvasLayers = {
+            1: { shapes: [], markers: [], infoWindows: [] },
+            2: { shapes: [], markers: [], infoWindows: [] },
+            3: { shapes: [], markers: [], infoWindows: [] }
+        };
+        
+        const locations = [
+            {
+                position: { lat: 24.26, lng: 118.12 },
+                title: 'Xiamen',
+                content: 'navy base'
+            }, 
+            {
+                position: { lat: 26.50, lng: 127.70 },
+                title: 'OKINAWA',
+                content: 'base'
+            }, 
+            {
+                position: { lat: 21.39, lng: 110.19 },
+                title: 'ZHANJIANG',
+                content: 'navy base'
+            },  
+            {
+                position: { lat: 28.51, lng: 120.55 },
+                title: 'nimbo base',
+                content: 'navy base'
+            },  
+	    {
+                position: { lat: 23.425, lng: 116.760278 },
+                title: 'Shantou Waisha',
+                content: 'Aircraft: J-10C、J-7E、J-7EG、Y8ASW'
+            },
+            {
+                position: { lat: 23.461667, lng: 120.392778 },
+                title: 'Chiayi Air Base',
+                content: 'Military Air Base'
+            },
+            {
+                position: { lat: 22.756389, lng: 118.307778 },
+                title: 'Aircraft Collision Location',
+                content: 'Site of reported aircraft collision'
+            },
+            {
+                position: { lat: 31.320628, lng: 121.412965 },
+                title: 'Shanghai Dachang',
+                content: 'Naval Aviation Force: KJ-500, J10, J11'
+            },
+            {
+                position: { lat: 18.226163, lng: 109.548871 },
+                title: 'Yulin Harbour',
+                content: 'Navy Base'
+            }
+        ];
+
+        function initMap() {
+            // 初始化地圖
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 30.0, lng: 115.0 },
+                zoom: 5
+            });
+
+            // 檢查地圖是否成功初始化
+            if (!map) {
+                console.error('Map failed to initialize');
+                return;
+            }
+
+            // 初始化繪圖管理器
+            drawingManager = new google.maps.drawing.DrawingManager({
+                drawingMode: null,
+                drawingControl: false,
+                polylineOptions: {
+                    strokeColor: '#FF0000',
+                    strokeWeight: 2
+                },
+                circleOptions: {
+                    fillColor: '#FF0000',
+                    fillOpacity: 0.2,
+                    strokeWeight: 2,
+                    strokeColor: '#FF0000',
+                    editable: true
+                }
+            });
+
+            drawingManager.setMap(map);
+
+            // 設置事件監聽器
+            setupEventListeners();
+            
+            // 創建基地標記
+            createBaseMarkers();
+            
+            // 創建導彈射程圓圈
+            createMissileRanges();
+        }
+
+        function setupEventListeners() {
+            // 繪圖完成事件
+            google.maps.event.addListener(drawingManager, 'overlaycomplete', function(event) {
+                activeShapes.push(event.overlay);
+            });
+
+            // 按鈕事件
+            $('#bases-button').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                toggleBaseMarkers(true);
+                toggleMissileRanges(false);
+            });
+
+            $('#missile-button').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                toggleBaseMarkers(false);
+                toggleMissileRanges(true);
+            });
+
+            $('#line-tool').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                drawingManager.setDrawingMode(google.maps.drawing.OverlayType.POLYLINE);
+            });
+
+            $('#circle-tool').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                drawingManager.setDrawingMode(google.maps.drawing.OverlayType.CIRCLE);
+            });
+
+            $('#measure-tool').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                startMeasuring();
+            });
+
+            $('#clear-tool').click(clearAll);
+
+            // 顏色點擊事件
+            $('.dot').click(function() {
+                resetTools();
+                activeDotColor = $(this).data('color');
+                $(this).addClass('active');
+                google.maps.event.addListenerOnce(map, 'click', addColoredDot);
+            });
+
+            // 文字工具事件
+            $('#text-tool').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                google.maps.event.addListenerOnce(map, 'click', addText);
+            });
+
+            // 符號按鈕點擊事件
+            $('.symbol-btn').click(function() {
+                resetTools();
+                $(this).addClass('active');
+                activeSymbol = $(this).data('symbol');
+                google.maps.event.addListenerOnce(map, 'click', addSymbol);
+            });
+
+            // 添加畫布切換事件
+            $('.canvas-btn').click(function() {
+                const canvasId = $(this).data('canvas');
+                switchCanvas(canvasId);
+            });
+
+            // 添加導出按鈕事件監聽器
+            $('#export-button').click(function() {
+                exportMapToPNG();
+            });
+        }
+
+        function toggleBaseMarkers(show) {
+            baseMarkers.forEach(marker => marker.setMap(show ? map : null));
+            $('#range-legend').hide();
+        }
+
+        function toggleMissileRanges(show) {
+            missileRanges.forEach(circle => circle.setMap(show ? map : null));
+            $('#range-legend').toggle(show);
+        }
+
+        function startMeasuring() {
+            activeTool = 'measure';
+            $('#measurement-info').show();
+            $('#map').addClass('measuring');
+            map.addListener('click', measureToolClickHandler);
+            mouseMoveListener = map.addListener('mousemove', updateTempLine);
+        }
+
+        function resetTools() {
+            $('.control-button').removeClass('active');
+            drawingManager.setDrawingMode(null);
+            $('#map').removeClass('measuring');
+            
+            if (measureLine) {
+                measureLine.setMap(null);
+            }
+            if (tempLine) {
+                tempLine.setMap(null);
+            }
+            measureMarkers.forEach(marker => marker.setMap(null));
+            measureMarkers = [];
+            
+            measurePath = [];
+            $('#measurement-info').hide();
+            
+            if (mouseMoveListener) {
+                google.maps.event.removeListener(mouseMoveListener);
+                mouseMoveListener = null;
+            }
+            google.maps.event.clearListeners(map, 'click');
+            activeTool = null;
+            activeDotColor = null;
+            $('.dot').removeClass('active');
+            activeSymbol = null;
+            $('.symbol-btn').removeClass('active');
+        }
+
+        function clearAll() {
+            clearAllFromMap();
+            canvasLayers[currentCanvas].shapes = [];
+            activeShapes = [];
+        }
+
+        function measureToolClickHandler(event) {
+            if (activeTool !== 'measure') return;
+
+            const latLng = event.latLng;
+            measurePath.push(latLng);
+
+            const marker = new google.maps.Marker({
+                position: latLng,
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 5,
+                    fillColor: '#4285f4',
+                    fillOpacity: 1,
+                    strokeWeight: 2,
+                    strokeColor: '#ffffff'
+                }
+            });
+            measureMarkers.push(marker);
+
+            if (measureLine) {
+                measureLine.setMap(null);
+            }
+
+            if (measurePath.length > 1) {
+                measureLine = new google.maps.Polyline({
+                    path: measurePath,
+                    strokeColor: '#4285f4',
+                    strokeWeight: 3,
+                    map: map
+                });
+
+                updateDistances();
+            }
+        }
+
+        function updateTempLine(event) {
+            if (activeTool !== 'measure' || measurePath.length === 0) return;
+
+            const tempPath = [...measurePath, event.latLng];
+            
+            if (tempLine) {
+                tempLine.setMap(null);
+            }
+
+            tempLine = new google.maps.Polyline({
+                path: tempPath,
+                strokeColor: '#4285f4',
+                strokeWeight: 2,
+                strokeOpacity: 0.5,
+                map: map
+            });
+
+            if (measurePath.length > 0) {
+                const segmentDistance = google.maps.geometry.spherical.computeDistanceBetween(
+                    measurePath[measurePath.length - 1],
+                    event.latLng
+                );
+                $('#segment-distance').text((segmentDistance / 1000).toFixed(2));
+            }
+        }
+
+        function updateDistances() {
+            let totalDistance = 0;
+            for (let i = 1; i < measurePath.length; i++) {
+                totalDistance += google.maps.geometry.spherical.computeDistanceBetween(
+                    measurePath[i-1], measurePath[i]
+                );
+            }
+            $('#total-distance').text((totalDistance / 1000).toFixed(2));
+        }
+
+        function addColoredDot(event) {
+            if (!activeDotColor) return;
+            
+            const dot = new google.maps.Circle({
+                strokeColor: activeDotColor,
+                strokeOpacity: 1.0,
+                strokeWeight: 2,
+                fillColor: activeDotColor,
+                fillOpacity: 0.8,
+                map: map,
+                center: event.latLng,
+                radius: 1000, // 1公里半径
+                editable: false
+            });
+            
+            activeShapes.push(dot);
+        }
+
+        function addText(event) {
+            const text = prompt('Please enter text：');
+            if (!text) return;
+            
+            const label = new google.maps.InfoWindow({
+                position: event.latLng,
+                content: `<div class="map-label">${text}</div>`,
+                pixelOffset: new google.maps.Size(0, -10)
+            });
+            
+            label.open(map);
+            activeShapes.push(label);
+        }
+
+        function addSymbol(event) {
+            if (!activeSymbol) return;
+            
+            const text = prompt('Enter marker description:');
+            if (!text) return;  // If user cancels input, don't add marker
+            
+            let icon;
+            
+            switch(activeSymbol) {
+                case 'plane':
+                    icon = {
+                        // 上半圓形路徑 (從 -180 度到 0 度)
+                        path: 'M 0,0 m -15,0 a 15,15 0 1,0 30,0',
+                        fillColor: '#0000FF',  // 藍色
+                        fillOpacity: 1,
+                        scale: 1,  // 調整大小
+                        strokeColor: '#000000',
+                        strokeWeight: 2,
+                        rotation: 180  // 旋轉 180 度使開口朝上
+                    };
+                    break;
+                case 'ship':
+                    icon = {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: '#FFFF00',  // 黃色
+                        fillOpacity: 1,
+                        scale: 12,  // 增加大小
+                        strokeColor: '#000000',
+                        strokeWeight: 2
+                    };
+                    break;
+                case 'person':
+                    icon = {
+                        // 自定義正方形路徑
+                        path: 'M -10,-10 L 10,-10 L 10,10 L -10,10 Z',  // 正方形路徑
+                        fillColor: '#00FF00',  // 綠色
+                        fillOpacity: 1,
+                        scale: 1,  // 調整大小
+                        strokeColor: '#000000',
+                        strokeWeight: 2
+                    };
+                    break;
+            }
+
+            const marker = new google.maps.Marker({
+                position: event.latLng,
+                map: map,
+                icon: icon,
+                draggable: true
+            });
+            
+            // 立即顯示包含文字的信息窗口
+            const infoWindow = new google.maps.InfoWindow({
+                content: `<div class="info-window">
+                            <p>${text}</p>
+                            <button onclick="removeMarker(this)" data-marker-id="${marker.id}">Delete</button>
+                        </div>`
+            });
+            infoWindow.open(map, marker);
+            
+            // 點擊標記時重新打開信息窗口
+            marker.addListener('click', () => {
+                if (activeInfoWindow) {
+                    activeInfoWindow.close();
+                }
+                infoWindow.open(map, marker);
+                activeInfoWindow = infoWindow;
+            });
+
+            activeShapes.push(marker);
+            activeShapes.push(infoWindow);
+        }
+
+        function removeMarker(button) {
+            const markerId = button.getAttribute('data-marker-id');
+            const markerIndex = activeShapes.findIndex(shape => shape.id === markerId);
+            if (markerIndex > -1) {
+                activeShapes[markerIndex].setMap(null);
+                activeShapes.splice(markerIndex, 1);
+            }
+        }
+
+        // 錯誤處理
+        function handleMapError(error) {
+            console.error('Google Maps Error:', error);
+            alert('地圖載入出錯，請檢查控制台獲取詳細信息');
+        }
+
+        // 添加錯誤處理
+        window.gm_authFailure = function() {
+            alert('Google Maps API 認證失敗，請檢查 API key');
+        };
+
+        // 添加畫布切換函數
+        function switchCanvas(canvasId) {
+            // 保存當前畫布的內容
+            saveCurrentCanvas();
+            
+            // 切換到新畫布
+            currentCanvas = canvasId;
+            
+            // 更新按鈕狀態
+            $('.canvas-btn').removeClass('active');
+            $(`#canvas${canvasId}`).addClass('active');
+            
+            // 清除地圖上的所有圖形
+            clearAllFromMap();
+            
+            // 載入選定畫布的內容
+            loadCanvas(canvasId);
+        }
+
+        // 保存當前畫布內容
+        function saveCurrentCanvas() {
+            canvasLayers[currentCanvas].shapes = [...activeShapes];
+        }
+
+        // 載入畫布內容
+        function loadCanvas(canvasId) {
+            activeShapes = [];
+            const layer = canvasLayers[canvasId];
+            
+            layer.shapes.forEach(shape => {
+                if (shape instanceof google.maps.Marker) {
+                    // 重新創建標記
+                    const newMarker = new google.maps.Marker({
+                        position: shape.getPosition(),
+                        map: map,
+                        icon: shape.getIcon(),
+                        draggable: true
+                    });
+                    activeShapes.push(newMarker);
+                } else if (shape instanceof google.maps.Polyline) {
+                    // 重新創建線條
+                    const newLine = new google.maps.Polyline({
+                        path: shape.getPath().getArray(),
+                        map: map,
+                        strokeColor: shape.get('strokeColor'),
+                        strokeWeight: shape.get('strokeWeight')
+                    });
+                    activeShapes.push(newLine);
+                } else if (shape instanceof google.maps.Circle) {
+                    // 重新創建圓形
+                    const newCircle = new google.maps.Circle({
+                        center: shape.getCenter(),
+                        radius: shape.getRadius(),
+                        map: map,
+                        fillColor: shape.get('fillColor'),
+                        fillOpacity: shape.get('fillOpacity'),
+                        strokeColor: shape.get('strokeColor'),
+                        strokeWeight: shape.get('strokeWeight')
+                    });
+                    activeShapes.push(newCircle);
+                } else if (shape instanceof google.maps.InfoWindow) {
+                    // 重新創建信息窗口
+                    const newInfoWindow = new google.maps.InfoWindow({
+                        position: shape.getPosition(),
+                        content: shape.getContent()
+                    });
+                    newInfoWindow.open(map);
+                    activeShapes.push(newInfoWindow);
+                }
+            });
+        }
+
+        // 添加從地圖清除所有圖形的函數
+        function clearAllFromMap() {
+            activeShapes.forEach(shape => {
+                if (shape instanceof google.maps.InfoWindow) {
+                    shape.close();
+                } else {
+                    shape.setMap(null);
+                }
+            });
+        }
+
+        // 修改添加圖形的函數，確保圖形被添加到當前畫布
+        function addToActiveShapes(shape) {
+            activeShapes.push(shape);
+            canvasLayers[currentCanvas].shapes = [...activeShapes];
+        }
+
+        // 添加導出功能
+        function exportMapToPNG() {
+            // 創建一個包含當前計劃名稱的文名
+            const fileName = `map_plan_${currentCanvas}_${new Date().toISOString().slice(0,10)}.png`;
+
+            // 獲取地圖的 HTML 元素
+            const mapElement = document.getElementById('map');
+
+            // 使用 html2canvas 將地圖轉換為 canvas
+            html2canvas(mapElement, {
+                useCORS: true,  // 允許跨域圖片
+                allowTaint: true,
+                logging: false,
+                scale: 2  // 提高輸出質量
+            }).then(canvas => {
+                // 創建下載鏈接
+                const link = document.createElement('a');
+                link.download = fileName;
+                link.href = canvas.toDataURL('image/png');
+                
+                // 觸發下載
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }).catch(error => {
+                console.error('Export failed:', error);
+                alert('Export failed. Please try again.');
+            });
+        }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCxLuiy4aJnVTkozy8xvFiV65m0OtDAgko&libraries=drawing,geometry&callback=initMap" async defer></script>
+</body>
+</html>
