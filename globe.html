@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Globe — Military Bases</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000010;
+            font-family: 'Segoe UI', 'Microsoft JhengHei', Arial, sans-serif;
+        }
+
+        #globe-container {
+            position: absolute;
+            inset: 0;
+        }
+
+        .top-bar {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 10;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .ctrl-btn {
+            padding: 8px 14px;
+            background: rgba(20, 30, 60, 0.75);
+            color: #cfe3ff;
+            border: 1px solid rgba(110, 160, 255, 0.35);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s;
+        }
+
+        .ctrl-btn:hover {
+            background: rgba(50, 80, 140, 0.85);
+        }
+
+        .title-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 10;
+            padding: 8px 14px;
+            color: #9fc1ff;
+            font-size: 14px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: rgba(20, 30, 60, 0.6);
+            border: 1px solid rgba(110, 160, 255, 0.25);
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+        }
+
+        #info-card {
+            position: absolute;
+            left: 15px;
+            bottom: 20px;
+            z-index: 10;
+            width: 280px;
+            padding: 14px 16px;
+            background: rgba(10, 18, 40, 0.85);
+            border: 1px solid rgba(110, 160, 255, 0.4);
+            border-left: 3px solid #ff5252;
+            border-radius: 8px;
+            color: #e6efff;
+            backdrop-filter: blur(6px);
+            display: none;
+        }
+
+        #info-card h3 {
+            font-size: 16px;
+            margin-bottom: 6px;
+            color: #ffd166;
+        }
+
+        #info-card p {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #b9cdf2;
+        }
+
+        #info-card .coords {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #6f87b8;
+            font-family: monospace;
+        }
+
+        #info-card .close-x {
+            position: absolute;
+            top: 6px;
+            right: 10px;
+            cursor: pointer;
+            color: #7d94c4;
+            font-size: 14px;
+        }
+
+        .hint {
+            position: absolute;
+            bottom: 20px;
+            right: 15px;
+            z-index: 10;
+            color: #5c729e;
+            font-size: 12px;
+        }
+
+        .globe-tooltip {
+            padding: 8px 10px;
+            background: rgba(10, 18, 40, 0.9);
+            border: 1px solid rgba(110, 160, 255, 0.4);
+            border-radius: 6px;
+            color: #e6efff;
+            font-size: 12px;
+            max-width: 240px;
+        }
+
+        .globe-tooltip b { color: #ffd166; }
+    </style>
+</head>
+<body>
+    <div id="globe-container"></div>
+
+    <div class="top-bar">
+        <a href="index.html" class="ctrl-btn">← Back to Map</a>
+        <button id="rotate-btn" class="ctrl-btn">⏸ Pause Rotation</button>
+        <button id="reset-btn" class="ctrl-btn">↺ Reset View</button>
+    </div>
+
+    <div class="title-badge">⦿ Theater Overview</div>
+
+    <div id="info-card">
+        <span class="close-x" onclick="this.parentElement.style.display='none'">✕</span>
+        <h3 id="info-title"></h3>
+        <p id="info-content"></p>
+        <div class="coords" id="info-coords"></div>
+    </div>
+
+    <div class="hint">拖曳旋轉 · 滾輪縮放 · 點擊基地查看詳情</div>
+
+    <script src="globe-assets/globe.gl.min.js"></script>
+    <script src="globe-assets/topojson-client.min.js"></script>
+    <script>
+        // 與 index.html 相同的基地資料
+        const locations = [
+            { position: { lat: 24.26, lng: 118.12 }, title: 'Xiamen', content: 'navy base' },
+            { position: { lat: 26.50, lng: 127.70 }, title: 'OKINAWA', content: 'base' },
+            { position: { lat: 21.39, lng: 110.19 }, title: 'ZHANJIANG', content: 'navy base' },
+            { position: { lat: 28.51, lng: 120.55 }, title: 'nimbo base', content: 'navy base' },
+            { position: { lat: 23.425, lng: 116.760278 }, title: 'Shantou Waisha', content: 'Aircraft: J-10C、J-7E、J-7EG、Y8ASW' },
+            { position: { lat: 23.461667, lng: 120.392778 }, title: 'Chiayi Air Base', content: 'Military Air Base' },
+            { position: { lat: 22.756389, lng: 118.307778 }, title: 'Aircraft Collision Location', content: 'Site of reported aircraft collision' },
+            { position: { lat: 31.320628, lng: 121.412965 }, title: 'Shanghai Dachang', content: 'Naval Aviation Force: KJ-500, J10, J11' },
+            { position: { lat: 18.226163, lng: 109.548871 }, title: 'Yulin Harbour', content: 'Navy Base' }
+        ];
+
+        const points = locations.map(l => ({
+            lat: l.position.lat,
+            lng: l.position.lng,
+            title: l.title,
+            content: l.content
+        }));
+
+        // 動畫弧線:各基地連向台海中心區域
+        const FOCUS = { lat: 23.9, lng: 119.5 };
+        const arcs = points
+            .filter(p => p.title !== 'Chiayi Air Base' && p.title !== 'Aircraft Collision Location')
+            .map(p => ({
+                startLat: p.lat, startLng: p.lng,
+                endLat: FOCUS.lat, endLng: FOCUS.lng,
+                color: ['rgba(255, 82, 82, 0.9)', 'rgba(255, 209, 102, 0.4)']
+            }));
+
+        const globe = Globe()(document.getElementById('globe-container'))
+            .globeImageUrl('globe-assets/earth-night.jpg')
+            .bumpImageUrl('globe-assets/earth-topology.png')
+            .backgroundImageUrl('globe-assets/night-sky.png')
+            .atmosphereColor('#3a6cff')
+            .atmosphereAltitude(0.22)
+            // 發光基地標柱
+            .pointsData(points)
+            .pointLat('lat').pointLng('lng')
+            .pointColor(() => '#ff5252')
+            .pointAltitude(0.06)
+            .pointRadius(0.35)
+            .pointLabel(d => `<div class="globe-tooltip"><b>${d.title}</b><br>${d.content}</div>`)
+            .onPointClick(focusBase)
+            .onPointHover(p => {
+                document.body.style.cursor = p ? 'pointer' : 'default';
+                setAutoRotate(!p && rotateOn);
+            })
+            // 基地名稱標籤
+            .labelsData(points)
+            .labelLat('lat').labelLng('lng')
+            .labelText('title')
+            .labelSize(0.65)
+            .labelDotRadius(0.22)
+            .labelColor(() => 'rgba(255, 209, 102, 0.85)')
+            .labelResolution(2)
+            .labelAltitude(0.012)
+            // 擴散漣漪動畫
+            .ringsData(points)
+            .ringLat('lat').ringLng('lng')
+            .ringColor(() => t => `rgba(255, 82, 82, ${1 - t})`)
+            .ringMaxRadius(2.2)
+            .ringPropagationSpeed(1.2)
+            .ringRepeatPeriod(1400)
+            // 發光飛行弧線
+            .arcsData(arcs)
+            .arcColor('color')
+            .arcAltitudeAutoScale(0.4)
+            .arcStroke(0.45)
+            .arcDashLength(0.45)
+            .arcDashGap(0.7)
+            .arcDashAnimateTime(2200);
+
+        // 國境輪廓(TopoJSON → GeoJSON)
+        fetch('globe-assets/countries-110m.json')
+            .then(res => res.json())
+            .then(topology => {
+                const countries = topojson.feature(topology, topology.objects.countries).features;
+                globe
+                    .polygonsData(countries)
+                    .polygonCapColor(() => 'rgba(80, 120, 200, 0.06)')
+                    .polygonSideColor(() => 'rgba(0, 0, 0, 0)')
+                    .polygonStrokeColor(() => 'rgba(120, 170, 255, 0.35)')
+                    .polygonAltitude(0.004);
+            })
+            .catch(err => console.error('Failed to load country borders:', err));
+
+        // 初始視角:台海上空
+        const HOME_VIEW = { lat: 25, lng: 118, altitude: 1.6 };
+        globe.pointOfView(HOME_VIEW, 0);
+
+        // 自動旋轉,互動時暫停
+        let rotateOn = true;
+        const controls = globe.controls();
+        controls.autoRotateSpeed = 0.6;
+        setAutoRotate(true);
+
+        function setAutoRotate(on) {
+            controls.autoRotate = on;
+        }
+
+        controls.addEventListener('start', () => setAutoRotate(false));
+        controls.addEventListener('end', () => setAutoRotate(rotateOn));
+
+        const rotateBtn = document.getElementById('rotate-btn');
+        rotateBtn.addEventListener('click', () => {
+            rotateOn = !rotateOn;
+            setAutoRotate(rotateOn);
+            rotateBtn.textContent = rotateOn ? '⏸ Pause Rotation' : '▶ Resume Rotation';
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            globe.pointOfView(HOME_VIEW, 1200);
+        });
+
+        // 點擊基地:運鏡聚焦 + 資訊卡
+        function focusBase(p) {
+            if (!p) return;
+            globe.pointOfView({ lat: p.lat, lng: p.lng, altitude: 0.9 }, 1200);
+            document.getElementById('info-title').textContent = p.title;
+            document.getElementById('info-content').textContent = p.content;
+            document.getElementById('info-coords').textContent =
+                `LAT ${p.lat.toFixed(4)}  ·  LNG ${p.lng.toFixed(4)}`;
+            document.getElementById('info-card').style.display = 'block';
+        }
+
+        window.addEventListener('resize', () => {
+            globe.width(window.innerWidth).height(window.innerHeight);
+        });
+    </script>
+</body>
+</html>
